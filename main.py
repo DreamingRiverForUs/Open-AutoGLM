@@ -20,7 +20,11 @@ import subprocess
 import sys
 from urllib.parse import urlparse
 
+from dotenv import load_dotenv
 from openai import OpenAI
+
+# Load environment variables from .env file if it exists
+load_dotenv()
 
 from phone_agent import PhoneAgent
 from phone_agent.agent import AgentConfig
@@ -35,7 +39,9 @@ from phone_agent.xctest import list_devices as list_ios_devices
 
 
 def check_system_requirements(
-    device_type: DeviceType = DeviceType.ADB, wda_url: str = "http://localhost:8100"
+    device_type: DeviceType = DeviceType.ADB,
+    wda_url: str = "http://localhost:8100",
+    device_id: str = None,
 ) -> bool:
     """
     Check system requirements before running the agent.
@@ -49,6 +55,7 @@ def check_system_requirements(
     Args:
         device_type: Type of device tool (ADB, HDC, or IOS).
         wda_url: WebDriverAgent URL (for iOS only).
+        device_id: ADB/HDC device ID for multi-device setups.
 
     Returns:
         True if all checks pass, False otherwise.
@@ -195,25 +202,38 @@ def check_system_requirements(
     if device_type == DeviceType.ADB:
         print("3. Checking ADB Keyboard...", end=" ")
         try:
+            # Build command with device ID if specified
+            cmd = ["adb", "shell", "ime", "list", "-s"]
+            if device_id:
+                cmd = ["adb", "-s", device_id, "shell", "ime", "list", "-s"]
+
             result = subprocess.run(
-                ["adb", "shell", "ime", "list", "-s"],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=10,
             )
             ime_list = result.stdout.strip()
 
+            # Debug output
+            if device_id:
+                print(f"\n   [DEBUG] Checking device: {device_id}")
+            print(f"\n   [DEBUG] Available input methods:")
+            for ime in ime_list.split('\n'):
+                if ime.strip():
+                    print(f"      - {ime.strip()}")
+
             if "com.android.adbkeyboard/.AdbIME" in ime_list:
-                print("✅ OK")
+                print("   ✅ OK")
             else:
-                print("❌ FAILED")
+                print("\n   ❌ FAILED")
                 print("   Error: ADB Keyboard is not installed on the device.")
                 print("   Solution:")
                 print("     1. Download ADB Keyboard APK from:")
                 print(
                     "        https://github.com/senzhk/ADBKeyBoard/blob/master/ADBKeyboard.apk"
                 )
-                print("     2. Install it on your device: adb install ADBKeyboard.apk")
+                print(f"     2. Install it on your device: adb{' -s ' + device_id if device_id else ''} install ADBKeyboard.apk")
                 print(
                     "     3. Enable it in Settings > System > Languages & Input > Virtual Keyboard"
                 )
@@ -737,6 +757,7 @@ def main():
         wda_url=args.wda_url
         if device_type == DeviceType.IOS
         else "http://localhost:8100",
+        device_id=args.device_id,
     ):
         sys.exit(1)
 
