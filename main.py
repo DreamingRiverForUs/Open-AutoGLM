@@ -226,18 +226,60 @@ def check_system_requirements(
             if "com.android.adbkeyboard/.AdbIME" in ime_list:
                 print("   ✅ OK")
             else:
-                print("\n   ❌ FAILED")
-                print("   Error: ADB Keyboard is not installed on the device.")
-                print("   Solution:")
-                print("     1. Download ADB Keyboard APK from:")
-                print(
-                    "        https://github.com/senzhk/ADBKeyBoard/blob/master/ADBKeyboard.apk"
-                )
-                print(f"     2. Install it on your device: adb{' -s ' + device_id if device_id else ''} install ADBKeyboard.apk")
-                print(
-                    "     3. Enable it in Settings > System > Languages & Input > Virtual Keyboard"
-                )
-                all_passed = False
+                print("\n   ⚠️  ADB Keyboard not found, attempting auto-install...")
+                # Try to install from resources directory
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                apk_path = os.path.join(script_dir, "resources", "ADBKeyboard.apk")
+
+                if os.path.exists(apk_path):
+                    print(f"   Found APK at: {apk_path}")
+                    install_cmd = ["adb", "install", apk_path]
+                    if device_id:
+                        install_cmd = ["adb", "-s", device_id, "install", apk_path]
+
+                    try:
+                        result = subprocess.run(
+                            install_cmd, capture_output=True, text=True, timeout=60
+                        )
+                        if result.returncode == 0 or "Success" in result.stdout:
+                            print("   ✅ APK installed successfully")
+
+                            # Now enable the input method
+                            enable_cmd = ["adb", "shell", "ime", "enable", "com.android.adbkeyboard/.AdbIME"]
+                            set_cmd = ["adb", "shell", "ime", "set", "com.android.adbkeyboard/.AdbIME"]
+                            if device_id:
+                                enable_cmd = ["adb", "-s", device_id, "shell", "ime", "enable", "com.android.adbkeyboard/.AdbIME"]
+                                set_cmd = ["adb", "-s", device_id, "shell", "ime", "set", "com.android.adbkeyboard/.AdbIME"]
+
+                            subprocess.run(enable_cmd, capture_output=True, timeout=10)
+                            subprocess.run(set_cmd, capture_output=True, timeout=10)
+                            print("   ✅ ADB Keyboard enabled and set as default")
+                            print("   ✅ OK")
+                        else:
+                            print("\n   ❌ FAILED to install APK")
+                            print(f"   Error: {result.stderr}")
+                            print("   Solution:")
+                            print("     1. Download ADB Keyboard APK from:")
+                            print(
+                                "        https://github.com/senzhk/ADBKeyBoard/blob/master/ADBKeyboard.apk"
+                            )
+                            print(f"     2. Install it manually: adb{' -s ' + device_id if device_id else ''} install ADBKeyboard.apk")
+                            all_passed = False
+                    except Exception as e:
+                        print(f"\n   ❌ FAILED to install: {e}")
+                        all_passed = False
+                else:
+                    print("\n   ❌ FAILED")
+                    print("   Error: ADB Keyboard is not installed on the device.")
+                    print("   Error: APK file not found in resources directory.")
+                    print("   Solution:")
+                    print("     1. Download ADB Keyboard APK from:")
+                    print(
+                        "        https://github.com/senzhk/ADBKeyBoard/blob/master/ADBKeyboard.apk"
+                    )
+                    print(f"     2. Place it at: {apk_path}")
+                    print(f"     3. Or install manually: adb{' -s ' + device_id if device_id else ''} install ADBKeyboard.apk")
+                    all_passed = False
         except subprocess.TimeoutExpired:
             print("❌ FAILED")
             print("   Error: ADB command timed out.")
